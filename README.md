@@ -19,8 +19,8 @@ pip install -r requirements.txt
 ## Run the server
 
 ```bash
-source venv/bin/activate  
-uvicorn app.main:app --reload --port 8000
+source venv/bin/activate
+python -m uvicorn app.main:app --reload --port 8000
 ```
 
 Interactive docs: http://localhost:8000/docs
@@ -37,8 +37,8 @@ The UI displays an interactive Gantt chart of the resulting schedule with one ro
 ## Run tests
 
 ```bash
-source venv/bin/activate  
-pytest tests/ -v
+source venv/bin/activate
+python -m pytest tests/ -v
 ```
 
 13 tests across four files:
