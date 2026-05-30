@@ -11,11 +11,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-# input_schema.py is the Client A request contract (spec refers to it as client_a_schema.py)
 from app.models.input_schema import ScheduleRequest
 from app.models.output_schema import Assignment, KPIs, ScheduleResponse, InfeasibleResponse
 from app.models.internal import InternalModel
-# translate() is the Client A normaliser (spec calls it normalize)
 from app.clients.client_a import translate as normalize
 from app.scheduler.engine import solve
 from app.kpis import compute_kpis
@@ -50,23 +48,16 @@ app.add_middleware(
 def schedule(request: ScheduleRequest) -> ScheduleResponse:
     """POST /schedule — validates input, runs the solver, returns a schedule or error."""
     try:
-        # Translate validated request into the solver-neutral internal model
         internal_model = normalize(request)
-
-        # Run the CP-SAT solver
         result = solve(internal_model)
 
-        # Return structured 422 if the solver cannot find a feasible schedule
         if result["status"] == "infeasible":
             return JSONResponse(
                 status_code=422,
                 content={"error": "infeasible", "why": result["reasons"]},
             )
 
-        # Compute KPIs from the feasible assignment list
         kpis = compute_kpis(result["assignments"], internal_model)
-
-        # Convert integer minutes back to ISO datetimes and build the response
         return _format_response(result["assignments"], kpis, internal_model, request.horizon.start)
 
     except Exception as exc:
