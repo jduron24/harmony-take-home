@@ -142,3 +142,4 @@ The dispatcher `_apply_objective()` and `solve()` require no changes. The caller
 **Adding a new constraint**
 
 Add one function `_constrain_<name>(cp, vars_, model)` in `engine.py` and call it inside `solve()` after the existing constraint calls. Each constraint is isolated in its own function with no logic in `solve()` itself.
+# harmony-take-home
