@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Harmony Production Scheduler</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em; }
+    header span { font-size: 0.8rem; background: #1e40af; color: #bfdbfe;
+                  padding: 2px 8px; border-radius: 99px; }
+
+    main { max-width: 1100px; margin: 0 auto; padding: 28px 24px; }
+
+    /* ── Input card ── */
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      border: 1px solid #e2e8f0;
+      padding: 20px 24px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em;
+      text-transform: uppercase; color: #64748b; margin-bottom: 12px;
+    }
+
+    textarea {
+      width: 100%; height: 200px;
+      font-family: "SF Mono", "Fira Code", monospace; font-size: 0.78rem;
+      border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px;
+      resize: vertical; background: #f8fafc; color: #334155;
+      outline: none;
+    }
+    textarea:focus { border-color: #3b82f6; background: #fff; }
+
+    .btn-row { display: flex; gap: 10px; margin-top: 12px; align-items: center; }
+    button {
+      padding: 9px 22px; border: none; border-radius: 6px; cursor: pointer;
+      font-size: 0.875rem; font-weight: 600; transition: opacity 0.15s;
+    }
+    button:hover { opacity: 0.85; }
+    #schedule-btn { background: #2563eb; color: #fff; }
+    #reset-btn    { background: #e2e8f0; color: #475569; }
+    #status-msg   { font-size: 0.8rem; color: #64748b; }
+
+    /* ── Error banner ── */
+    #error-section {
+      background: #fef2f2; border: 1px solid #fecaca;
+      border-radius: 10px; padding: 16px 20px; margin-bottom: 20px;
+    }
+    #error-section h3 { color: #b91c1c; font-size: 0.9rem; margin-bottom: 6px; }
+    #error-reasons { list-style: disc; padding-left: 18px; }
+    #error-reasons li { font-size: 0.82rem; color: #991b1b; margin-top: 4px; }
+
+    /* ── Gantt chart ── */
+    #gantt-wrap { overflow-x: auto; }
+    svg text { pointer-events: none; }
+    .assignment rect { cursor: pointer; transition: opacity 0.1s; }
+    .assignment:hover rect { opacity: 1 !important; }
+
+    /* ── Tooltip ── */
+    #tooltip {
+      position: fixed; background: #0f172a; color: #f8fafc;
+      font-size: 0.78rem; padding: 8px 12px; border-radius: 6px;
+      pointer-events: none; z-index: 100; line-height: 1.6;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    }
+
+    /* ── Legend ── */
+    #legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+    .legend-item { display: flex; align-items: center; gap: 6px;
+                   font-size: 0.78rem; color: #475569; }
+    .legend-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+
+    /* ── KPI cards ── */
+    #kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 14px;
+    }
+    .kpi-card {
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+      padding: 16px 18px;
+    }
+    .kpi-label { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em;
+                 text-transform: uppercase; color: #94a3b8; margin-bottom: 4px; }
+    .kpi-value { font-size: 1.6rem; font-weight: 700; color: #0f172a;
+                 line-height: 1.1; }
+    .kpi-unit  { font-size: 0.75rem; color: #64748b; margin-top: 2px; }
+
+    /* ── Utilization bars ── */
+    #util-grid { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+    .util-row  { display: flex; align-items: center; gap: 10px; font-size: 0.8rem; }
+    .util-name { width: 64px; color: #475569; font-weight: 500; }
+    .util-track { flex: 1; background: #e2e8f0; border-radius: 99px; height: 8px; }
+    .util-fill  { height: 8px; border-radius: 99px; background: #3b82f6;
+                  transition: width 0.4s ease; }
+    .util-pct   { width: 36px; text-align: right; color: #334155; font-weight: 600; }
+
+    /* ── Tabs ── */
+    .tab-bar { display: flex; border-bottom: 1px solid #e2e8f0; margin-bottom: 16px; }
+    .tab-btn {
+      padding: 8px 18px; border: none; background: none; cursor: pointer;
+      font-size: 0.82rem; font-weight: 600; color: #94a3b8;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-btn.active { color: #2563eb; border-bottom-color: #2563eb; }
+    .tab-btn:hover:not(.active) { color: #475569; }
+
+    /* ── Raw JSON pane ── */
+    #raw-output {
+      font-family: "SF Mono", "Fira Code", monospace; font-size: 0.76rem;
+      background: #0f172a; color: #e2e8f0; padding: 16px; border-radius: 8px;
+      overflow-x: auto; white-space: pre; max-height: 520px; overflow-y: auto;
+      line-height: 1.6;
+    }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Harmony Production Scheduler</h1>
+  <span>CP-SAT</span>
+</header>
+
+<main>
+
+  <!-- Input -->
+  <div class="card">
+    <div class="card-title">Schedule Request (JSON)</div>
+    <textarea id="json-input" spellcheck="false"></textarea>
+    <div class="btn-row">
+      <button id="schedule-btn">Run Scheduler</button>
+      <button id="reset-btn">Reset</button>
+      <span id="status-msg"></span>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div id="error-section" class="hidden">
+    <h3>Infeasible — no schedule found</h3>
+    <ul id="error-reasons"></ul>
+  </div>
+
+  <!-- Gantt chart + Raw JSON (tabbed) -->
+  <div id="gantt-card" class="card hidden">
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('gantt')">Gantt</button>
+      <button class="tab-btn"        onclick="switchTab('raw')">Raw JSON</button>
+    </div>
+    <div id="tab-gantt">
+      <div id="gantt-wrap"><svg id="gantt-svg"></svg></div>
+      <div id="legend"></div>
+    </div>
+    <div id="tab-raw" class="hidden">
+      <pre id="raw-output"></pre>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div id="kpi-card" class="card hidden">
+    <div class="card-title">KPIs</div>
+    <div id="kpi-grid"></div>
+  </div>
+
+</main>
+
+<div id="tooltip" class="hidden"></div>
+
+<script>
+/* ─────────────────────────────────────────────
+   Sample data (pre-filled in textarea)
+───────────────────────────────────────────── */
+const SAMPLE = {"horizon":{"start":"2025-11-03T08:00:00","end":"2025-11-03T16:00:00"},"resources":[{"id":"Fill-1","capabilities":["fill"],"calendar":[["2025-11-03T08:00:00","2025-11-03T12:00:00"],["2025-11-03T12:30:00","2025-11-03T16:00:00"]]},{"id":"Fill-2","capabilities":["fill"],"calendar":[["2025-11-03T08:00:00","2025-11-03T16:00:00"]]},{"id":"Label-1","capabilities":["label"],"calendar":[["2025-11-03T08:00:00","2025-11-03T16:00:00"]]},{"id":"Pack-1","capabilities":["pack"],"calendar":[["2025-11-03T08:00:00","2025-11-03T16:00:00"]]}],"changeover_matrix_minutes":{"values":{"standard->standard":0,"standard->premium":20,"premium->standard":20,"premium->premium":0}},"products":[{"id":"P-100","family":"standard","due":"2025-11-03T12:30:00","route":[{"capability":"fill","duration_minutes":30},{"capability":"label","duration_minutes":20},{"capability":"pack","duration_minutes":15}]},{"id":"P-101","family":"premium","due":"2025-11-03T15:00:00","route":[{"capability":"fill","duration_minutes":35},{"capability":"label","duration_minutes":25},{"capability":"pack","duration_minutes":15}]},{"id":"P-102","family":"standard","due":"2025-11-03T13:30:00","route":[{"capability":"fill","duration_minutes":25},{"capability":"label","duration_minutes":20}]},{"id":"P-103","family":"premium","due":"2025-11-03T14:00:00","route":[{"capability":"fill","duration_minutes":30},{"capability":"label","duration_minutes":20},{"capability":"pack","duration_minutes":15}]}],"settings":{"time_limit_seconds":30,"objective_mode":"min_tardiness"}};
+
+const PALETTE = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#84cc16','#f97316'];
+
+/* ─────────────────────────────────────────────
+   Initialise
+───────────────────────────────────────────── */
+document.getElementById('json-input').value = JSON.stringify(SAMPLE, null, 2);
+
+document.getElementById('reset-btn').addEventListener('click', () => {
+  document.getElementById('json-input').value = JSON.stringify(SAMPLE, null, 2);
+  hide('error-section'); hide('gantt-card'); hide('kpi-card');
+  setStatus('');
+});
+
+document.getElementById('schedule-btn').addEventListener('click', runSchedule);
+
+/* ─────────────────────────────────────────────
+   API call
+───────────────────────────────────────────── */
+async function runSchedule() {
+  let payload;
+  try {
+    payload = JSON.parse(document.getElementById('json-input').value);
+  } catch (e) {
+    setStatus('Invalid JSON — ' + e.message); return;
+  }
+
+  setStatus('Solving…');
+  hide('error-section'); hide('gantt-card'); hide('kpi-card');
+
+  try {
+    const res  = await fetch('http://localhost:8000/schedule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json();
+
+    if (!res.ok) {
+      showError(body); setStatus(''); return;
+    }
+    setStatus('');
+    renderGantt(body.assignments, payload);
+    renderKPIs(body.kpis);
+    renderRaw(body);
+    switchTab('gantt');
+  } catch (e) {
+    setStatus('Could not reach API — is the server running on port 8000?');
+  }
+}
+
+/* ─────────────────────────────────────────────
+   Error display
+───────────────────────────────────────────── */
+function showError(body) {
+  const reasons = body.why || [body.message || 'Unknown error'];
+  const ul = document.getElementById('error-reasons');
+  ul.innerHTML = reasons.map(r => `<li>${r}</li>`).join('');
+  show('error-section');
+}
+
+/* ─────────────────────────────────────────────
+   Gantt chart
+───────────────────────────────────────────── */
+function renderGantt(assignments, request) {
+  const horizonStart  = new Date(request.horizon.start);
+  const horizonEnd    = new Date(request.horizon.end);
+  const totalMinutes  = (horizonEnd - horizonStart) / 60000;
+
+  const resourceIds   = request.resources.map(r => r.id);
+  const productIds    = [...new Set(assignments.map(a => a.product))].sort();
+  const colorOf       = Object.fromEntries(productIds.map((p, i) => [p, PALETTE[i % PALETTE.length]]));
+
+  const LEFT = 90, RIGHT = 24, TOP = 36, ROW = 54, BAR = 34;
+  const wrap        = document.getElementById('gantt-wrap');
+  const totalWidth  = Math.max(wrap.offsetWidth, 700);
+  const chartWidth  = totalWidth - LEFT - RIGHT;
+  const totalHeight = TOP + resourceIds.length * ROW + 24;
+
+  const toX = min  => LEFT + (min / totalMinutes) * chartWidth;
+  const toMin = iso => (new Date(iso) - horizonStart) / 60000;
+  const fmt   = iso => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+
+  let s = `<svg id="gantt-svg" width="${totalWidth}" height="${totalHeight}" xmlns="http://www.w3.org/2000/svg">`;
+
+  /* alternating row backgrounds */
+  resourceIds.forEach((_, i) => {
+    s += `<rect x="${LEFT}" y="${TOP + i * ROW}" width="${chartWidth}" height="${ROW}" fill="${i % 2 === 0 ? '#f8fafc' : '#f1f5f9'}"/>`;
+  });
+
+  /* calendar break shading for resources with multiple windows */
+  request.resources.forEach(res => {
+    if (res.calendar.length < 2) return;
+    const resIdx = resourceIds.indexOf(res.id);
+    if (resIdx === -1) return;
+    for (let i = 0; i < res.calendar.length - 1; i++) {
+      const breakStart = toMin(res.calendar[i][1]);
+      const breakEnd   = toMin(res.calendar[i + 1][0]);
+      const bx = toX(breakStart), bw = toX(breakEnd) - bx;
+      const by = TOP + resIdx * ROW;
+      s += `<rect x="${bx}" y="${by}" width="${bw}" height="${ROW}" fill="url(#hatch)" opacity="0.5"/>`;
+    }
+  });
+
+  /* hatch pattern for breaks */
+  s += `<defs><pattern id="hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
+    <line x1="0" y1="0" x2="0" y2="6" stroke="#94a3b8" stroke-width="2"/>
+  </pattern></defs>`;
+
+  /* hour grid lines + labels */
+  for (let m = 0; m <= totalMinutes; m += 60) {
+    const x   = toX(m);
+    const lbl = new Date(horizonStart.getTime() + m * 60000)
+                  .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    s += `<line x1="${x}" y1="${TOP}" x2="${x}" y2="${totalHeight - 24}" stroke="#cbd5e1" stroke-width="1"/>`;
+    s += `<text x="${x}" y="${TOP - 8}" text-anchor="middle" font-size="10" fill="#94a3b8">${lbl}</text>`;
+  }
+
+  /* resource labels */
+  resourceIds.forEach((id, i) => {
+    const cy = TOP + i * ROW + ROW / 2;
+    s += `<text x="${LEFT - 8}" y="${cy + 4}" text-anchor="end" font-size="12" font-weight="600" fill="#475569">${id}</text>`;
+  });
+
+  /* assignment bars */
+  assignments.forEach(a => {
+    const ri = resourceIds.indexOf(a.resource);
+    if (ri === -1) return;
+    const x  = toX(toMin(a.start));
+    const w  = toX(toMin(a.end)) - x;
+    const y  = TOP + ri * ROW + (ROW - BAR) / 2;
+    const c  = colorOf[a.product];
+    const lbl = w > 40 ? a.product : (w > 22 ? a.product.replace('P-', '') : '');
+    const tip = `${a.product} · step ${a.step_index} · ${a.capability}&#10;${fmt(a.start)} → ${fmt(a.end)}`;
+
+    s += `<g class="assignment">
+      <rect x="${x}" y="${y}" width="${w}" height="${BAR}" rx="4"
+            fill="${c}" opacity="0.88"
+            data-tip="${tip}"/>`;
+    if (lbl) s += `<text x="${x + w / 2}" y="${y + BAR / 2 + 4}" text-anchor="middle"
+            font-size="10" font-weight="700" fill="#fff">${lbl}</text>`;
+    s += `</g>`;
+  });
+
+  s += '</svg>';
+  document.getElementById('gantt-wrap').innerHTML = s;
+
+  /* tooltip */
+  const tooltip = document.getElementById('tooltip');
+  document.querySelectorAll('.assignment rect').forEach(rect => {
+    rect.addEventListener('mouseenter', e => {
+      tooltip.textContent = '';
+      (e.target.dataset.tip || '').split('&#10;').forEach((line, i) => {
+        if (i > 0) tooltip.appendChild(document.createElement('br'));
+        tooltip.appendChild(document.createTextNode(line));
+      });
+      tooltip.classList.remove('hidden');
+    });
+    rect.addEventListener('mousemove', e => {
+      tooltip.style.left = (e.clientX + 14) + 'px';
+      tooltip.style.top  = (e.clientY - 36) + 'px';
+    });
+    rect.addEventListener('mouseleave', () => tooltip.classList.add('hidden'));
+  });
+
+  /* legend */
+  document.getElementById('legend').innerHTML = productIds.map(p =>
+    `<div class="legend-item">
+       <div class="legend-swatch" style="background:${colorOf[p]}"></div>
+       <span>${p}</span>
+     </div>`
+  ).join('');
+
+  show('gantt-card');
+}
+
+/* ─────────────────────────────────────────────
+   KPI cards
+───────────────────────────────────────────── */
+function renderKPIs(kpis) {
+  const grid = document.getElementById('kpi-grid');
+
+  const summary = [
+    { label: 'Total Tardiness', value: kpis.tardiness_minutes, unit: 'minutes' },
+    { label: 'Makespan',        value: kpis.makespan_minutes,  unit: 'minutes' },
+    { label: 'Changeovers',     value: kpis.changeover_count,  unit: 'count'   },
+    { label: 'Changeover Time', value: kpis.changeover_minutes,unit: 'minutes' },
+  ];
+
+  grid.innerHTML = summary.map(k =>
+    `<div class="kpi-card">
+       <div class="kpi-label">${k.label}</div>
+       <div class="kpi-value">${k.value}</div>
+       <div class="kpi-unit">${k.unit}</div>
+     </div>`
+  ).join('');
+
+  /* utilization mini-bar card */
+  const utilRows = Object.entries(kpis.utilization_pct).map(([id, pct]) =>
+    `<div class="util-row">
+       <span class="util-name">${id}</span>
+       <div class="util-track"><div class="util-fill" style="width:${pct}%"></div></div>
+       <span class="util-pct">${pct}%</span>
+     </div>`
+  ).join('');
+
+  grid.innerHTML +=
+    `<div class="kpi-card" style="grid-column: span 2; min-width:0">
+       <div class="kpi-label">Resource Utilization</div>
+       <div id="util-grid" style="margin-top:10px">${utilRows}</div>
+     </div>`;
+
+  show('kpi-card');
+}
+
+/* ─────────────────────────────────────────────
+   Helpers
+───────────────────────────────────────────── */
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+function setStatus(msg) { document.getElementById('status-msg').textContent = msg; }
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent.toLowerCase().startsWith(tab));
+  });
+  document.getElementById('tab-gantt').classList.toggle('hidden', tab !== 'gantt');
+  document.getElementById('tab-raw').classList.toggle('hidden',   tab !== 'raw');
+}
+
+function renderRaw(body) {
+  document.getElementById('raw-output').textContent = JSON.stringify(body, null, 2);
+}
+</script>
+</body>
+</html>
