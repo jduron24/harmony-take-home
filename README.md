@@ -47,7 +47,7 @@ python -m pytest tests/ -v
 |---|---|
 | `test_overlap.py` | No-overlap and precedence invariants |
 | `test_kpis.py` | Independent KPI recomputation from raw output |
-| `test_infeasible.py` | Structured 422 error responses — two pre-solve cases and one solver-level infeasibility case |
+| `test_infeasible.py` | Structured 422 error responses — three infeasibility scenarios across four tests: two pre-solve cases, one solver-level case, and one response shape check |
 | `test_schedule_validity.py` | Changeover gaps match matrix values, assignments fit within calendar windows, determinism (identical input → identical output) |
 
 example.json contains the Client A sample input from the spec.
@@ -75,7 +75,7 @@ If no valid schedule exists the API returns HTTP 422 with this shape:
 }
 ```
 
-The `why` list contains at least one concrete reason naming the specific product, step, and constraint that failed.
+Pre-solve failures name the specific product and step (e.g. missing capability, window too small). Solver-level infeasibility returns a general reason explaining that the constraints are mutually contradictory.
 
 ---
 
@@ -109,7 +109,7 @@ CP-SAT guarantees all constraints are satisfied and finds the optimal solution a
 
 **Pre-solve infeasibility checks.** Two structural checks run before the CP model is built: (1) every operation has at least one eligible resource, (2) every operation fits in at least one calendar window of at least one eligible resource. These produce concrete, named reasons immediately rather than waiting for the solver to time out.
 
-**Solver over heuristic.** OR-Tools CP-SAT was chosen over a hand-written greedy algorithm because the four constraint types interact in ways that make locally optimal decisions globally wrong. For example, a changeover can push an operation past a calendar window which cascades into downstream deadline misses. CP-SAT handles all constraints simultaneously and guarantees the solution respects every rule. The tradeoff is debuggability, when the solver returns an unexpected result it is harder to trace than stepping through custom code. At the current problem size this cost is acceptable.
+**Solver over heuristic.** OR-Tools CP-SAT was chosen over a hand-written greedy algorithm because the five constraint types interact in ways that make locally optimal decisions globally wrong. For example, a changeover can push an operation past a calendar window which cascades into downstream deadline misses. CP-SAT handles all constraints simultaneously and guarantees the solution respects every rule. The tradeoff is debuggability, when the solver returns an unexpected result it is harder to trace than stepping through custom code. At the current problem size this cost is acceptable.
 
 **Determinism.** `num_search_workers = 1` is set explicitly in the solver. By default CP-SAT uses all available cores and runs multiple worker threads in parallel; whichever thread finds the optimal solution first wins, and that varies with CPU scheduling. The result is correct either way but the specific schedule differs between calls. Pinning to one worker removes the race and guarantees identical output for identical input. The tradeoff is slower time-to-first-solution on large problems, negligible here at ~4ms, but worth removing if the problem size grows significantly.
 
